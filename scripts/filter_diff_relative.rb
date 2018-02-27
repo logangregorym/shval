@@ -23,21 +23,22 @@
 # a single differential trace computational graph node
 class DiffNode
   attr_reader :id, :label, :abserr, :relerr, :addr, :disas, :src
-  attr_accessor :in, :out, :red
+  attr_accessor :in, :out, :color
 
   def initialize (id, label, abserr, relerr, addr="", disas="", src="")
     @id, @label, @abserr, @relerr = id, label, abserr, relerr
     @addr, @disas, @src = addr, disas, src
     @in, @out = [], []
-    @red = 0x00;
+    @color = 0xff;
   end
 
   # convert to DOT format (including outgoing edges)
   def to_s
+    cformat = "#{@color.to_s(16).rjust(2, '0')}"
     "#{@id.to_s} [label=\"#{@label.to_s}" +
     " abserr=#{@abserr.to_s} relerr=#{@relerr.to_s}"+
-    " addr=#{@addr} disas='#{@disas}' src=#{@src}" +
-    " style=filled fillcolor=\"\##{@red.to_s(16).rjust(2,'0')}0000\"];\n" +
+    " addr=#{@addr} disas='#{@disas}' src=#{@src}\"" +
+    " style=filled fillcolor=\"\#ff" + cformat + cformat + "\"];\n" +
     @out.map { |id| "#{@id} -> #{id};" }.join("\n")
   end
 
@@ -77,11 +78,11 @@ graph.each do |id,node|
   end
 end
 
-max == 0 ? factor = 0 : factor = 255/max
+factor = max == 0 ? 0 : 0xff/max
 
 #color each node accordingly
 graph.each do |id,node|
-  node.red = (node.relerr * factor).round
+  node.color -= (node.relerr * factor).round
 end
 
 # re-output graph in DOT format
