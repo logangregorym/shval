@@ -22,11 +22,12 @@
 
 # a single differential trace computational graph node
 class DiffNode
-  attr_reader :id, :label, :abserr, :relerr
+  attr_reader :id, :label, :abserr, :relerr, :addr, :disas, :src
   attr_accessor :in, :out, :red
 
-  def initialize (id, label, abserr, relerr)
+  def initialize (id, label, abserr, relerr, addr="", disas="", src="")
     @id, @label, @abserr, @relerr = id, label, abserr, relerr
+    @addr, @disas, @src = addr, disas, src
     @in, @out = [], []
     @red = 0x00;
   end
@@ -34,7 +35,8 @@ class DiffNode
   # convert to DOT format (including outgoing edges)
   def to_s
     "#{@id.to_s} [label=\"#{@label.to_s}" +
-    " abserr=#{@abserr.to_s} relerr=#{@relerr.to_s}\""+
+    " abserr=#{@abserr.to_s} relerr=#{@relerr.to_s}"+
+    " addr=#{@addr} disas='#{@disas}' src=#{@src}" +
     " style=filled fillcolor=\"\##{@red.to_s(16).rjust(2,'0')}0000\"];\n" +
     @out.map { |id| "#{@id} -> #{id};" }.join("\n")
   end
@@ -46,13 +48,17 @@ graph = Hash.new      # map: id => node
 edges = []            # list of [src,dst] pairs
 
 # load graph from DOT file
+
 ARGF.each_line do |line|
-  if line =~ /^(\d+) \[label="([^ ]*) abserr=([^ ]*) relerr=([^ ]*)"\];$/
+  if line =~ /^(\d+) \[label="([^ ]*) abserr=([^ ]*) relerr=([^ ]*) addr=([0-9a-f]*) disas='([^']*)' src=([^ ]*)"\];$/
+    graph[$1.to_i] = DiffNode.new($1.to_i, $2, $3.to_f, $4.to_f, $5, $6, $7)
+  elsif line =~ /^(\d+) \[label="([^ ]*) abserr=([^ ]*) relerr=([^ ]*)"\];$/
     graph[$1.to_i] = DiffNode.new($1.to_i, $2, $3.to_f, $4.to_f)
   elsif line =~ /^(\d+) -> (\d+);$/
     edges << [$1.to_i, $2.to_i]       # save edge info for later
   end
 end
+
 
 # add all edge information to graph
 edges.each do |src,dst|
@@ -60,7 +66,6 @@ edges.each do |src,dst|
   graph[dst].in << src if not graph[dst].nil?
 end
 
-# TODO: do processing here
 # for example, keep only nodes with at least incoming or outgoing edge
 graph.select! { |id,node| node.in.size > 0 or node.out.size > 0 }
 
