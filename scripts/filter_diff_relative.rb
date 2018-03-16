@@ -47,6 +47,7 @@ end
 # data structures
 graph = Hash.new      # map: id => node
 edges = []            # list of [src,dst] pairs
+clusters = Hash.new{|hash, key| hash[key] = []}
 
 # load graph from DOT file
 
@@ -60,6 +61,8 @@ ARGF.each_line do |line|
   end
 end
 
+#remove duplicacte edges
+edges = edges.uniq
 
 # add all edge information to graph
 edges.each do |src,dst|
@@ -70,7 +73,7 @@ end
 # for example, keep only nodes with at least incoming or outgoing edge
 graph.select! { |id,node| node.in.size > 0 or node.out.size > 0 }
 
-#Find the max absolute error in the graph
+# find the max absolute error in the graph
 max = 0
 graph.each do |id,node|
   if (node.relerr > max)
@@ -80,13 +83,30 @@ end
 
 factor = max == 0 ? 0 : 0xff/max
 
-#color each node accordingly
+# color each node accordingly
 graph.each do |id,node|
   node.color -= (node.relerr * factor).round
 end
 
+# categorize all nodes based on function
+graph.each do |id,node|
+  clusters[node.func + ";"] << (id.to_s + ";")
+end
+
+
 # re-output graph in DOT format
 puts "digraph trace {"
+
+# output function clusters
+count = 0
+clusters.each do |each|
+  print "subgraph cluster_#{count}{\nlabel="
+  puts each
+  puts "}\n"
+  count += 1
+end
+
+# output dots and edges
 graph.each do |id,node|
   puts node
 end

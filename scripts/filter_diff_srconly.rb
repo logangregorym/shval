@@ -22,12 +22,12 @@
 
 # a single differential trace computational graph node
 class DiffNode
-  attr_reader :id, :label, :abserr, :relerr, :addr, :disas, :src
+  attr_reader :id, :label, :abserr, :relerr, :addr, :disas, :func, :src
   attr_accessor :in, :out, :color
 
-  def initialize (id, label, abserr, relerr, addr="", disas="", src="")
+  def initialize (id, label, abserr, relerr, addr="", disas="", func="", src="")
     @id, @label, @abserr, @relerr = id, label, abserr, relerr
-    @addr, @disas, @src = addr, disas, src
+    @addr, @disas, @func, @src = addr, disas, func, src
     @in, @out = [], []
     @color = 0xff;
   end
@@ -45,12 +45,13 @@ end
 # data structures
 graph = Hash.new      # map: id => node
 edges = []            # list of [src,dst] pairs
+clusters = Hash.new {|hash, key| hash[key] = []}
 
 # load graph from DOT file
 
 ARGF.each_line do |line|
-  if line =~ /^(\d+) \[label="([^ ]*) abserr=([^ ]*) relerr=([^ ]*) addr=([0-9a-f]*) disas='([^']*)' src=([^ ]*)"\];$/
-    graph[$1.to_i] = DiffNode.new($1.to_i, $2, $3.to_f, $4.to_f, $5, $6, $7)
+  if line =~ /^(\d+) \[label="([^ ]*) abserr=([^ ]*) relerr=([^ ]*) addr=([0-9a-f]*) disas='([^']*)' func='([^']*)' src=([^ ]*)"\];$/
+    graph[$1.to_i] = DiffNode.new($1.to_i, $2, $3.to_f, $4.to_f, $5, $6, $7, $8)
   elsif line =~ /^(\d+) \[label="([^ ]*) abserr=([^ ]*) relerr=([^ ]*)"\];$/
     graph[$1.to_i] = DiffNode.new($1.to_i, $2, $3.to_f, $4.to_f)
   elsif line =~ /^(\d+) -> (\d+);$/
@@ -58,6 +59,7 @@ ARGF.each_line do |line|
   end
 end
 
+# remove duplicate edges
 edges = edges.uniq
 
 # add all edge information to graph
@@ -84,8 +86,25 @@ graph.each do |id,node|
   node.color -= (node.relerr * factor).round
 end
 
+
+# categorize all nodes based on function
+graph.each do |id,node|
+  clusters[node.func + ";"] << (id.to_s + ";")
+end
+
 # re-output graph in DOT format
 puts "digraph trace {"
+
+# output function clusters
+count = 0
+clusters.each do |each|
+  print "subgraph cluster_#{count}{\nlabel="
+  puts each
+  puts "}\n"
+  count += 1
+end
+
+# output dots and edges
 graph.each do |id,node|
   puts node
 end
