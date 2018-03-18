@@ -42,10 +42,37 @@ class DiffNode
 
 end
 
+# a cluster of node ids
+class Cluster
+  attr_reader :relerr, :ids
+  attr_accessor :color
+
+  def initialize(node)
+    @ids = [node.id.to_s + ";"]
+    @relerr = node.relerr
+    @color = 0x00
+  end
+
+  def add(node)
+    @ids << node.id.to_s + ";"
+    @relerr = (@relerr + node.relerr)/2
+  end
+
+  def cformat
+    format = "#{@color.to_s(16).rjust(2, '0')}"
+    "\"\##{format}0000\""
+  end
+
+  def to_s
+    @ids.join("\n")
+  end
+
+end
+
 # data structures
 graph = Hash.new      # map: id => node
 edges = []            # list of [src,dst] pairs
-clusters = Hash.new {|hash, key| hash[key] = []}
+clusters = Hash.new   # map: name => cluster
 
 # load graph from DOT file
 
@@ -79,17 +106,26 @@ graph.each do |id,node|
   end
 end
 
+# categorize all nodes based on function
+graph.each do |id,node|
+  func = node.func
+  if clusters.has_key?(func)
+    clusters[func].add(node)
+  else 
+    clusters[func] = Cluster.new(node)
+  end
+end
+
 factor = max == 0 ? 0 : 0xff/max
 
-#color each node accordingly
+# color each node accordingly
 graph.each do |id,node|
   node.color -= (node.relerr * factor).round
 end
 
-
-# categorize all nodes based on function
-graph.each do |id,node|
-  clusters[node.func + ";"] << (id.to_s + ";")
+# color each cluster accordingly
+clusters.each do |name, cluster|
+  cluster.color += (cluster.relerr * factor).round
 end
 
 # re-output graph in DOT format
@@ -97,9 +133,11 @@ puts "digraph trace {"
 
 # output function clusters
 count = 0
-clusters.each do |each|
-  print "subgraph cluster_#{count}{\nlabel="
-  puts each
+clusters.each do |name, cluster|
+  puts "subgraph cluster_#{count}{"
+  puts "color=#{cluster.cformat}"
+  puts "label=#{name}"
+  puts cluster
   puts "}\n"
   count += 1
 end
