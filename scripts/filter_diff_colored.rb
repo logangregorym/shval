@@ -21,12 +21,37 @@
 #
 
 # a single differential trace computational graph node
+require 'optparse'
+
+$verbose = false;
+
+parser = OptionParser.new do|opts|
+  opts.banner = "Usage: example.rb [options]"
+
+  opts.on("-v", "--verbose", "Run verbosely") do 
+    $verbose = true
+  end
+
+  opts.on('-h', '--help', 'Displays Help') do
+    puts opts
+    exit
+  end
+
+end
+
+parser.parse!
+
+# format color
+def colorf (color)
+  "#{color.to_s(16).rjust(2, '0')}"
+end
+
 class DiffNode
   attr_reader :id, :label, :abserr, :relerr, :addr, :disas, :func, :src
   attr_accessor :in, :out, :color
 
   def initialize (id, label, abserr, relerr, addr="", disas="", func="", src="")
-    @id, @label, @abserr, @relerr = id, label, abserr, relerr
+    @id, @label, @abserr, @relerr = id, label, abserr, (relerr ** (1.0/5))
     @addr, @disas, @func, @src = addr, disas, func, src
     @in, @out = [], []
     @color = 0xff;
@@ -34,9 +59,14 @@ class DiffNode
 
   # convert to DOT format (including outgoing edges)
   def to_s
-    cformat = "#{@color.to_s(16).rjust(2, '0')}"
-    "#{@id.to_s} [label=\"#{@label.to_s} #{@src}\"" +
-    " style=filled fillcolor=\"\#ff" + cformat + cformat + "\"];\n" +
+    cformat = colorf(@color)
+    output =  "#{@id.to_s} [label=\"#{@label.to_s} "
+    if ($verbose)
+      output += "abserr=#{@abserr.to_s} relerr=#{@relerr.to_s}" +
+      " addr=#{@addr} disas='#{@disas}' func='#{@func}' src="
+    end
+    output += "#{@src}\" style=filled fillcolor=\"" + 
+    "\#ff#{cformat}#{cformat}\"];\n" +
     @out.map { |id| "#{@id} -> #{id};" }.join("\n")
   end
 
@@ -59,8 +89,7 @@ class Cluster
   end
 
   def cformat
-    format = "#{@color.to_s(16).rjust(2, '0')}"
-    "\"\##{format}0000\""
+    "\"\##{colorf(@color)}0000\""
   end
 
   def to_s
