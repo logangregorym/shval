@@ -24,12 +24,17 @@
 require 'optparse'
 
 $verbose = false;
+$collapse = false;
 
 parser = OptionParser.new do|opts|
   opts.banner = "Usage: example.rb [options]"
 
   opts.on("-v", "--verbose", "Run verbosely") do 
     $verbose = true
+  end
+
+  opts.on("-c", "--collapse", "Collapse functions with 0 error") do 
+    $collapse = true
   end
 
   opts.on('-h', '--help', 'Displays Help') do
@@ -48,43 +53,45 @@ end
 
 class DiffNode
   attr_reader :id, :label, :abserr, :relerr, :addr, :disas, :func, :src
-  attr_accessor :in, :out, :color
+  attr_accessor :in, :out, :color, :cluster
 
   def initialize (id, label, abserr, relerr, addr="", disas="", func="", src="")
     @id, @label, @abserr, @relerr = id, label, abserr, (relerr ** (1.0/5))
     @addr, @disas, @func, @src = addr, disas, func, src
     @in, @out = [], []
-    @color = 0xff;
+    @color = 0xff
   end
 
   # convert to DOT format (including outgoing edges)
   def to_s
     cformat = colorf(@color)
-    output =  "#{@id.to_s} [label=\"#{@label.to_s} "
+    output =  "#{@id.to_s} [label=\"#{@disas.to_s} "
     if ($verbose)
-      output += "abserr=#{@abserr.to_s} relerr=#{@relerr.to_s}" +
+      output += "abserr=#{@abserr.to_s} relerr=#{(@relerr ** 5.0).to_s}" +
       " addr=#{@addr} disas='#{@disas}' func='#{@func}' src="
     end
     output += "#{@src}\" style=filled fillcolor=\"" + 
     "\#ff#{cformat}#{cformat}\"];\n" +
     @out.map { |id| "#{@id} -> #{id};" }.join("\n")
+    output
   end
 
 end
 
 # a cluster of node ids
 class Cluster
-  attr_reader :relerr, :ids
-  attr_accessor :color
+  attr_reader :relerr, :name
+  attr_accessor :color, :nodes
 
   def initialize(node)
-    @ids = [node.id.to_s + ";"]
+    @name = node.func
+    @nodes = [node]
     @relerr = node.relerr
     @color = 0x00
   end
 
   def add(node)
-    @ids << node.id.to_s + ";"
+    @nodes << node
     @relerr = (@relerr + node.relerr)/2
   end
 
@@ -93,9 +100,26 @@ class Cluster
   end
 
   def to_s
-    @ids.join("\n")
+    if(@relerr > 0 || !$collapse)
+      output = "subgraph cluster_#{@name}{\n"
+      output += "penwidth=6\n"
+      output += "color=#{cformat}\n"
+      output += "label=\"function:#{@name} relerr:#{@relerr ** 5.0}\"\n"
+      output += @nodes.map {|node| "#{node.id.to_s};"}.join("")
+      output += "\n}\n"
+      output += @nodes.map {|node| "#{node.to_s}"}.join("\n")
+    else
+      @color = 0xff - @color
+      format = "\"\#ff#{colorf(@color)}#{colorf(@color)}\""
+      output = "#{nodes[0].id.to_s} [label=\"function:#{@name} relerr:#{@relerr ** 5.0}"
+      output += "\" shape=box tyle=filled penwidth=6 fillcolor=#{format}];\n"
+      @nodes.each do |node|
+        output += (node.out.map {|id| "#{nodes[0].id} -> #{id};"}).join("\n");
+        output += (node.in.map {|id| "#{id} -> #{nodes[0].id};"}).join("\n");
+      end
+    end
+    output
   end
-
 end
 
 # data structures
@@ -158,22 +182,12 @@ clusters.each do |name, cluster|
 end
 
 # re-output graph in DOT format
-puts "digraph trace {"
+puts "digraph trace {\nfontsize=24.0"
 
 # output function clusters
-count = 0
 clusters.each do |name, cluster|
-  puts "subgraph cluster_#{count}{"
-  puts "color=#{cluster.cformat}"
-  puts "label=#{name}"
   puts cluster
-  puts "}\n"
-  count += 1
 end
 
-# output dots and edges
-graph.each do |id,node|
-  puts node
-end
 puts "}"
 
