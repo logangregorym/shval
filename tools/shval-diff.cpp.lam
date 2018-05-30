@@ -46,19 +46,12 @@ typedef struct {
     double f64;
 } diff_t;
 
-double test = 0;
 
-
-#define NODE(V,L)   if((V)->f64 != 0) { \
-                        test = fabs(((V)->f64  - (V)->f32) / (V)->f64) ;\
-                    } \
-                    fout << (V)->id << " [label=\"" << (L) \
+#define NODE(V,L)   fout << (V)->id << " [label=\"" << (L) \
                          << " abserr=" << fabs(((V)->f64 - (V)->f32)) \
-                         << " relerr=" << test; \
-/*\
- *                   fout << " f64=" << std::scientific << (V)->f64 \
- *                        << " f32=" << std::scientific << (V)->f32; \
- */\
+                         << " relerr=" << fabs(((V)->f64 - (V)->f32) / (V)->f64); \
+                    fout << " f64=" << dec << (V)->f64 \
+                         << " f32=" << dec << (V)->f32; \
                     if (KnobOnlineTraceInsAddrs.Value()) { \
                          fout << " addr=" << hex << getCurrentInsAddr() << dec \
                               << " disas='" << insDisas[getCurrentInsAddr()] \

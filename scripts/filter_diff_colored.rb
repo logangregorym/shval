@@ -25,6 +25,7 @@ require 'optparse'
 
 $verbose = false;
 $collapse = false;
+$graph = Hash.new
 
 parser = OptionParser.new do|opts|
   opts.banner = "Usage: example.rb [options]"
@@ -33,7 +34,7 @@ parser = OptionParser.new do|opts|
     $verbose = true
   end
 
-  opts.on("-c", "--collapse", "Collapse functions with 0 error") do 
+  opts.on("-c", "--collapse", "Collapse all functions to nodes") do 
     $collapse = true
   end
 
@@ -52,11 +53,12 @@ def colorf (color)
 end
 
 class DiffNode
-  attr_reader :id, :label, :abserr, :relerr, :addr, :disas, :func, :src
-  attr_accessor :in, :out, :color, :cluster
+  attr_reader :label, :abserr, :relerr, :addr, :disas, :func, :src
+  attr_accessor :in, :out, :color, :id
 
   def initialize (id, label, abserr, relerr, addr="", disas="", func="", src="")
-    @id, @label, @abserr, @relerr = id, label, abserr, (relerr ** (1.0/5))
+    @id, @label, @abserr = id, label, abserr
+    @relerr = abserr == 0 ? 0 : (relerr ** (1.0/5))
     @addr, @disas, @func, @src = addr, disas, func, src
     @in, @out = [], []
     @color = 0xff
@@ -100,7 +102,7 @@ class Cluster
   end
 
   def to_s
-    if(@relerr > 0 || !$collapse)
+    if(@relerr > 0 && !$collapse)
       output = "subgraph cluster_#{@name}{\n"
       output += "penwidth=6\n"
       output += "color=#{cformat}\n"
@@ -112,10 +114,20 @@ class Cluster
       @color = 0xff - @color
       format = "\"\#ff#{colorf(@color)}#{colorf(@color)}\""
       output = "#{nodes[0].id.to_s} [label=\"function:#{@name} relerr:#{@relerr ** 5.0}"
-      output += "\" shape=box tyle=filled penwidth=6 fillcolor=#{format}];\n"
+      output += "\" shape=box style=filled penwidth=6 fillcolor=#{format}];\n"
+      found = []
       @nodes.each do |node|
-        output += (node.out.map {|id| "#{nodes[0].id} -> #{id};"}).join("\n");
-        output += (node.in.map {|id| "#{id} -> #{nodes[0].id};"}).join("\n");
+        node.out.each do |id|
+          update = $graph[id].id
+          if(update != node.id && !found.include?(update))
+            found << update
+            output += "#{node.id} -> #{update}\n"
+          end
+        end
+  #      output += (node.out.map {|id| "#{node.id} -> #{$graph[id].id};"}).join("\n");
+        if(!$collapse)
+  #        output += (node.in.map {|id| "#{id} -> #{nodes[0].id};"}).join("\n");
+        end
       end
     end
     output
@@ -176,10 +188,32 @@ graph.each do |id,node|
   node.color -= (node.relerr * factor).round
 end
 
+#Find the max absolute error in the clusters
+max = 0
+clusters.each do |id,node|
+  if (node.relerr > max)
+    max = node.relerr
+  end
+end
+
+factor = max == 0 ? 0 : 0xff/max
+
 # color each cluster accordingly
 clusters.each do |name, cluster|
   cluster.color += (cluster.relerr * factor).round
 end
+
+# fix edges with collapse
+clusters.each do |name, cluster|
+  if ($collapse || cluster.relerr <= 0)
+    id = cluster.nodes[0].id
+    cluster.nodes.each do |node|
+      node.id = id
+    end
+  end
+end
+
+$graph = graph
 
 # re-output graph in DOT format
 puts "digraph trace {\nfontsize=24.0"
